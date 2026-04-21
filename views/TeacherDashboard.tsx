@@ -173,8 +173,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogo
           const lon = position.coords.longitude;
           
           // MI Nur Bilad Coordinates
-          const targetLat = -6.114196248039071;
-          const targetLon = 106.2276108127061;
+          const targetLat = -6.2765699723318376;
+          const targetLon = 106.29062083115875;
 
           // Haversine formula to calculate distance in meters
           const R = 6371e3; // Earth radius in meters
