@@ -753,9 +753,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogo
                     <RefreshCw size={14} className={isLocating ? "animate-spin" : ""} />
                 </button>
               </label>
-              <div className={`bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm flex items-center gap-2 ${!location ? 'text-slate-500 italic' : 'text-emerald-400'}`}>
-                 <MapPin size={16} />
-                 <span className="truncate">{location || (isLocating ? "Sedang mendeteksi lokasi..." : "Klik refresh untuk lokasi")}</span>
+              <div className={`bg-slate-800 border ${location.includes('|') && parseInt(location.split('|')[1], 10) > 50 ? 'border-red-500/50 text-red-400' : 'border-slate-700 text-emerald-400'} rounded-lg p-3 text-sm flex flex-col gap-1 ${!location ? 'text-slate-500 italic' : ''}`}>
+                 <div className="flex items-center gap-2">
+                     <MapPin size={16} />
+                     <span className="truncate">{location ? location.split('|')[0] : (isLocating ? "Sedang mendeteksi lokasi..." : "Klik refresh untuk lokasi")}</span>
+                 </div>
+                 {location && location.includes('|') && (
+                     <span className={`text-[11px] font-mono ${parseInt(location.split('|')[1], 10) > 50 ? 'text-red-400 opacity-100' : 'text-emerald-400/70'} pl-6 block font-medium`}>
+                        Jarak ke tapak: {location.split('|')[1]} meter
+                     </span>
+                 )}
               </div>
            </div>
 
@@ -790,7 +797,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({ user, onLogo
 
            <button 
              onClick={handleAttendanceSubmit}
-             disabled={loading || !photo || !location}
+             disabled={loading || !photo || !location || (location.includes('|') && parseInt(location.split('|')[1], 10) > 50)}
              className="mt-2 w-full bg-primary hover:bg-emerald-600 active:scale-95 text-white font-semibold py-3.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
            >
              {loading ? 'Mengirim Data...' : (modalType === 'checkin' ? 'Kirim Absen Masuk' : 'Kirim Absen Pulang')}
