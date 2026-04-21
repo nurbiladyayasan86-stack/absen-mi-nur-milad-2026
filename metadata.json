@@ -1,0 +1,9 @@
+{
+  "name": "Absen MI Nur Bilad",
+  "description": "Aplikasi absensi mobile-first untuk guru dan kepala sekolah MI NUR BILAD dengan fitur pencatatan kehadiran, izin, dan laporan kinerja.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": []
+}

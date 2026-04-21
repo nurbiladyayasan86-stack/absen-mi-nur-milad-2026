@@ -1,0 +1,494 @@
+import React, { useState, useEffect } from 'react';
+import { User, AttendanceRecord } from '../types';
+import { getAllTodayRecords, getAllRecords, downloadMonthlyReport, fetchLivePeers } from '../services/mockBackend';
+import { Download, Users, UserCheck, UserX, Search, School, Home, User as UserIcon, FileDown, Calendar, Clock, AlertTriangle, CheckCircle2, HeartPulse, FileText, Briefcase, MapPin, LogOut, RefreshCw } from 'lucide-react';
+import { ProfileView } from './ProfileView';
+import { motion, AnimatePresence } from 'motion/react';
+
+interface PrincipalDashboardProps {
+  user: User;
+  onLogout: () => void;
+}
+
+export const PrincipalDashboard: React.FC<PrincipalDashboardProps> = ({ user, onLogout }) => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home');
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [historyRecords, setHistoryRecords] = useState<AttendanceRecord[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [historyFilter, setHistoryFilter] = useState('');
+
+  // Default download range: 1st of current month to Today
+  const todayStr = new Date().toISOString().split('T')[0];
+  const firstDayStr = todayStr.substring(0, 7) + '-01';
+  
+  const [downloadStartDate, setDownloadStartDate] = useState(firstDayStr);
+  const [downloadEndDate, setDownloadEndDate] = useState(todayStr);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const loadData = async () => {
+    // Memuat data lokal instan sebagai dasar (sementara)
+    const localToday = getAllTodayRecords();
+    
+    // Menarik Data Live secara asinkron dari CSV
+    const liveData = await fetchLivePeers(user.id);
+    
+    if (liveData !== null) {
+        // Jika berhasil pull dari CSV (termasuk jika kosong krn mmg dihapus semua di CSV)
+        setRecords(liveData); 
+    } else {
+        // Jika fetch putus asa (null/error jaringan/batas dari Google),
+        // Kita biarkan saja UI menggunakan state yang sudah ada sebelumnya.
+        // Tapi jika ini run pertama kali dan state masih kosong, pakai local saja.
+        setRecords(prev => prev.length > 0 ? prev : localToday);
+    }
+
+    if (activeTab === 'history') {
+        setHistoryRecords(getAllRecords());
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+        await loadData();
+    } finally {
+        setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    // Initial Load
+    loadData();
+
+    // Polling for live updates every 30 seconds
+    const interval = setInterval(() => {
+        loadData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
+  const handleDownload = () => {
+    if (!downloadStartDate || !downloadEndDate) {
+        alert("Silakan pilih tanggal mulai dan selesai.");
+        return;
+    }
+    if (downloadStartDate > downloadEndDate) {
+        alert("Tanggal mulai tidak boleh lebih besar dari tanggal selesai.");
+        return;
+    }
+    downloadMonthlyReport(downloadStartDate, downloadEndDate);
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 11) return 'Selamat Pagi';
+    if (hour < 15) return 'Selamat Siang';
+    if (hour < 18) return 'Selamat Sore';
+    return 'Selamat Malam';
+  };
+
+  const honorific = user.gender === 'male' ? 'Bapak' : 'Ibu';
+  const presentCount = records.filter(r => r.type === 'present').length;
+  const absentCount = records.filter(r => r.type !== 'present').length;
+
+  const filteredRecords = records.filter(r => 
+    r.userName.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const filteredHistory = historyRecords.filter(r => 
+    r.userName.toLowerCase().includes(historyFilter.toLowerCase()) || 
+    r.date.includes(historyFilter)
+  );
+
+  const renderHome = () => (
+    <div className="min-h-screen bg-dark pb-24">
+      {/* Sticky Header with Logo */}
+      <div className="bg-card border-b border-slate-800 p-4 sticky top-0 z-20 shadow-lg shadow-black/20">
+        <div className="flex justify-between items-center max-w-2xl mx-auto">
+          <div className="flex items-center gap-3">
+             <img src="https://i.ibb.co/LdXLhscV/photo-2026-02-21-18-02-04.jpg" alt="Logo MI NUR BILAD" className="w-[38px] h-[38px] object-contain drop-shadow-md rounded text-[0]" />
+            <div>
+                <h1 className="font-bold text-white leading-tight">MI NUR BILAD</h1>
+                <p className="text-[10px] text-slate-400 font-medium">Tunjung Teja, Serang-Banten</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto p-6 flex flex-col gap-6">
+        
+        {/* Title */}
+        <div>
+           <h2 className="text-xl font-bold text-white">{getGreeting()}, {honorific} {user.name}</h2>
+           <p className="text-sm text-slate-400">Monitoring kehadiran guru realtime</p>
+        </div>
+
+        {/* Clock Card */}
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700/50 shadow-xl relative overflow-hidden group">
+          <div className="absolute -right-4 -top-4 w-32 h-32 bg-primary/10 rounded-full blur-3xl group-hover:bg-primary/20 transition-all"></div>
+          <div className="relative z-10 flex flex-col items-center justify-center py-2">
+            <span className="text-slate-400 text-sm uppercase tracking-wider font-medium mb-1">
+              {currentTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </span>
+            <span className="text-5xl font-mono font-bold text-white tracking-tighter tabular-nums">
+              {currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-emerald-900/30 border border-emerald-800 p-4 rounded-xl flex items-center gap-4">
+            <div className="p-3 bg-emerald-500/20 rounded-lg text-emerald-400">
+                <UserCheck size={24} />
+            </div>
+            <div>
+                <div className="text-2xl font-bold text-white">{presentCount}</div>
+                <div className="text-xs text-emerald-400 font-medium uppercase">Hadir Hari Ini</div>
+            </div>
+          </div>
+          <div className="bg-amber-900/30 border border-amber-800 p-4 rounded-xl flex items-center gap-4">
+            <div className="p-3 bg-amber-500/20 rounded-lg text-amber-400">
+                <UserX size={24} />
+            </div>
+            <div>
+                <div className="text-2xl font-bold text-white">{absentCount}</div>
+                <div className="text-xs text-amber-400 font-medium uppercase">Izin / Sakit</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions & Filters */}
+        <div className="flex flex-col gap-4">
+           {/* Search Input */}
+          <div className="relative">
+              <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input 
+                  type="text" 
+                  placeholder="Cari guru hari ini..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+              />
+          </div>
+
+          {/* Download Report Section */}
+          <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex flex-col gap-4">
+              <div className="flex items-center gap-2 text-white font-semibold text-sm">
+                  <FileDown size={18} className="text-blue-400" />
+                  Download Laporan Kehadiran
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                  <div>
+                      <label className="text-[10px] uppercase text-slate-500 font-bold mb-1 block">Dari Tanggal</label>
+                      <input 
+                        type="date" 
+                        value={downloadStartDate}
+                        onChange={(e) => setDownloadStartDate(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                  </div>
+                  <div>
+                      <label className="text-[10px] uppercase text-slate-500 font-bold mb-1 block">Sampai Tanggal</label>
+                      <input 
+                        type="date" 
+                        value={downloadEndDate}
+                        onChange={(e) => setDownloadEndDate(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                  </div>
+              </div>
+              <button 
+                onClick={handleDownload}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition-all active:scale-95 text-sm"
+              >
+                <Download size={16} />
+                Download Excel (CSV)
+              </button>
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="bg-slate-800/50 border border-slate-700 rounded-2xl overflow-hidden mt-2">
+            <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/80">
+                <h3 className="font-bold text-white flex items-center gap-2 text-sm">
+                    <Users size={16} className="text-blue-400" /> Rekap Kehadiran Hari Ini
+                </h3>
+                <div className="flex items-center gap-2">
+                    <button 
+                      onClick={handleRefresh}
+                      disabled={isRefreshing}
+                      className="text-slate-400 hover:text-white transition-colors p-1"
+                      title="Segarkan Data"
+                    >
+                      <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-blue-400' : ''} />
+                    </button>
+                    <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2 py-1 rounded-full font-bold">
+                       {filteredRecords.length} Data
+                    </span>
+                </div>
+            </div>
+            <div className="divide-y divide-slate-700/50">
+                {filteredRecords.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 text-xs flex flex-col items-center gap-2">
+                        <Clock size={24} className="opacity-20" />
+                        Belum ada guru yang absen hari ini.
+                    </div>
+                ) : (
+                    filteredRecords.map((rec) => (
+                        <div key={rec.id} className="p-3 hover:bg-slate-800/50 transition-colors">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-3">
+                                    {/* Avatar Initials or Picture */}
+                                    {rec.avatar ? (
+                                        <img src={rec.avatar} alt={rec.userName} referrerPolicy="no-referrer" className="w-8 h-8 rounded-full border-2 border-slate-600 object-cover bg-slate-800" />
+                                    ) : (
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white border-2 ${
+                                            rec.type === 'present' ? 'bg-emerald-600 border-emerald-500/30' : 
+                                            rec.type === 'sppd' ? 'bg-purple-600 border-purple-500/30' :
+                                            'bg-amber-600 border-amber-500/30'
+                                        }`}>
+                                            {rec.userName.substring(0,2).toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div>
+                                        <p className="text-sm font-medium text-white line-clamp-1">
+                                            {rec.userName} {rec.notes && rec.notes.includes('TELAT') && <span className="text-[10px] text-red-400 font-normal ml-1">(Telat)</span>}
+                                        </p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${
+                                                rec.type === 'present' ? 'bg-emerald-400' :
+                                                rec.type === 'sppd' ? 'bg-purple-400' :
+                                                'bg-amber-400'
+                                            }`}></span>
+                                            <p className="text-[10px] text-slate-400 font-medium">
+                                                {rec.type === 'present' ? 'Hadir' : 
+                                                 rec.type === 'sick' ? 'Sakit' : 
+                                                 rec.type === 'leave' ? 'Izin' : 
+                                                 rec.type === 'sppd' ? 'SPPD' : rec.type.toUpperCase()}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-right flex flex-col items-end gap-1">
+                                    {rec.type === 'present' ? (
+                                        <>
+                                            <div className="text-[10px] font-mono text-emerald-400 font-medium">
+                                                Datang: {rec.checkInTime || '--:--'}
+                                            </div>
+                                            <div className="text-[10px] font-mono text-blue-400 font-medium">
+                                                Pulang: {rec.checkOutTime || '--:--'}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+                                            rec.type === 'sick' ? 'text-red-400 bg-red-400/10 border border-red-400/20' : 
+                                            rec.type === 'leave' ? 'text-amber-400 bg-amber-400/10 border border-amber-400/20' : 
+                                            'text-purple-400 bg-purple-400/10 border border-purple-400/20'
+                                        }`}>
+                                            {rec.type === 'sick' ? 'Sakit' : rec.type === 'leave' ? 'Izin' : 'SPPD'}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {rec.type !== 'present' && (
+                                <div className="mt-3 bg-slate-900/50 p-2.5 rounded-lg text-[11px] text-slate-300 border border-slate-700/50 flex items-start gap-2">
+                                    {rec.sppdData ? (
+                                        <>
+                                           <Briefcase size={12} className="text-purple-400 shrink-0 mt-0.5" />
+                                           <div>
+                                               <p className="font-bold text-purple-400">SPPD: {rec.sppdData.activityType}</p>
+                                               <p className="text-slate-400">{rec.sppdData.destination}</p>
+                                           </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FileText size={12} className="text-amber-400 shrink-0 mt-0.5" />
+                                            <p>{rec.notes || 'Tidak ada keterangan tambahan'}</p>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                             {/* Location display for present users */}
+                             {rec.type === 'present' && rec.location && (
+                                <div className="mt-2 flex items-center gap-1 text-[10px] text-slate-500 ml-12">
+                                    <MapPin size={10} /> {rec.location}
+                                </div>
+                             )}
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderHistory = () => (
+    <div className="min-h-screen bg-dark pb-24">
+      {/* Header with Logo */}
+      <div className="bg-card border-b border-slate-800 p-4 sticky top-0 z-20 shadow-lg shadow-black/20">
+        <div className="flex justify-between items-center max-w-2xl mx-auto">
+          <div className="flex items-center gap-3">
+            <img src="https://i.ibb.co/LdXLhscV/photo-2026-02-21-18-02-04.jpg" alt="Logo MI NUR BILAD" className="w-[38px] h-[38px] object-contain drop-shadow-md rounded text-[0]" />
+            <div>
+              <h1 className="font-bold text-white leading-tight">MI NUR BILAD</h1>
+              <p className="text-[10px] text-slate-400 font-medium">Riwayat Absensi Seluruh Guru</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-2xl mx-auto p-4 flex flex-col gap-4">
+        {/* Search/Filter */}
+        <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input 
+                type="text" 
+                placeholder="Cari berdasarkan nama atau tanggal (YYYY-MM-DD)..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary"
+                value={historyFilter}
+                onChange={(e) => setHistoryFilter(e.target.value)}
+            />
+        </div>
+
+        {filteredHistory.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[50vh] text-slate-500 gap-3">
+             <Calendar size={48} className="opacity-20" />
+             <p>Tidak ada riwayat absensi ditemukan.</p>
+          </div>
+        ) : (
+          filteredHistory.map((item) => {
+            const isLate = item.notes && item.notes.includes('TELAT');
+            let icon = <CheckCircle2 size={18} />;
+            let themeColor = 'emerald';
+            
+            if (item.type === 'sick') { icon = <HeartPulse size={18} />; themeColor = 'red'; }
+            else if (item.type === 'leave') { icon = <FileText size={18} />; themeColor = 'amber'; }
+            else if (item.type === 'sppd') { icon = <Briefcase size={18} />; themeColor = 'purple'; }
+
+            return (
+            <div key={item.id} className="bg-slate-800 rounded-xl p-4 border border-slate-700 relative overflow-hidden group">
+               {/* Background Watermark Icon */}
+               <div className={`absolute -right-4 -bottom-4 opacity-5 pointer-events-none text-${themeColor}-400`}>
+                   {React.cloneElement(icon as React.ReactElement, { size: 100 })}
+               </div>
+
+               <div className="flex gap-4 relative z-10">
+                   {/* Date Box */}
+                   <div className={`flex flex-col items-center justify-center bg-slate-900 rounded-xl w-16 h-auto shrink-0 border border-slate-700/50 p-2 shadow-inner`}>
+                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{new Date(item.date).toLocaleDateString('id-ID', { month: 'short' })}</span>
+                      <span className="text-2xl font-bold text-white leading-none my-1">{new Date(item.date).getDate()}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">{new Date(item.date).toLocaleDateString('id-ID', { weekday: 'short' })}</span>
+                   </div>
+
+                   {/* Main Content */}
+                   <div className="flex-1 flex flex-col gap-2">
+                        {/* Header: Name and Badge */}
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h4 className="font-bold text-white text-sm">{item.userName}</h4>
+                                <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide mt-1
+                                    ${item.type === 'present' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                                      item.type === 'sppd' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                                      'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                    }
+                                `}>
+                                    {icon}
+                                    {item.type === 'present' ? 'HADIR' : item.type.toUpperCase()}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Body: Times or Description */}
+                        {item.type === 'present' ? (
+                            <div className="grid grid-cols-2 gap-3 mt-1">
+                                <div className="bg-slate-900/50 rounded-lg p-2 border border-slate-700/30">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1 mb-1">
+                                        <Clock size={10} /> Masuk
+                                    </div>
+                                    <div className={`text-base font-mono font-bold ${isLate ? "text-red-400" : "text-white"}`}>
+                                        {item.checkInTime}
+                                    </div>
+                                    {isLate && <div className="text-[9px] text-red-400 mt-1 leading-none font-medium">TERLAMBAT</div>}
+                                </div>
+                                <div className="bg-slate-900/50 rounded-lg p-2 border border-slate-700/30">
+                                    <div className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1 mb-1">
+                                        <LogOut size={10} /> Pulang
+                                    </div>
+                                    <div className="text-base font-mono font-bold text-white">
+                                        {item.checkOutTime || '--:--'}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 mt-1">
+                                <div className="text-xs text-slate-300 leading-relaxed">
+                                    {item.sppdData ? (
+                                        <>
+                                            <span className="block font-bold text-purple-400 mb-1">{item.sppdData.activityType}</span>
+                                            <span className="flex items-center gap-1 text-slate-400"><MapPin size={10}/> {item.sppdData.destination}</span>
+                                        </>
+                                    ) : (
+                                        item.notes || 'Tidak ada keterangan'
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                   </div>
+               </div>
+            </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 10 }}
+          transition={{ duration: 0.2 }}
+        >
+          {activeTab === 'home' && renderHome()}
+          {activeTab === 'profile' && <ProfileView user={user} onLogout={onLogout} />}
+        </motion.div>
+      </AnimatePresence>
+      
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 pb-safe z-50">
+        <div className="flex justify-around items-center h-16 max-w-2xl mx-auto">
+          <button 
+            onClick={() => setActiveTab('home')}
+            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${activeTab === 'home' ? 'text-primary' : 'text-slate-500'}`}
+          >
+            <Home size={24} strokeWidth={activeTab === 'home' ? 2.5 : 2} />
+            <span className="text-[10px] font-medium">Beranda</span>
+          </button>
+          
+          <button 
+            onClick={() => setActiveTab('profile')}
+            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-colors ${activeTab === 'profile' ? 'text-primary' : 'text-slate-500'}`}
+          >
+            <UserIcon size={24} strokeWidth={activeTab === 'profile' ? 2.5 : 2} />
+            <span className="text-[10px] font-medium">Profil</span>
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
