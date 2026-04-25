@@ -123,9 +123,18 @@ export const loginUser = async (username: string, password: string, requiredRole
   return null;
 };
 
+export const getLocalTodayString = () => {
+  const d = new Date();
+  const tzDate = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+  const yyyy = tzDate.getFullYear();
+  const mm = String(tzDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(tzDate.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 export const getTodayRecord = (userId: string): AttendanceRecord | undefined => {
   const records: AttendanceRecord[] = JSON.parse(localStorage.getItem(ATTENDANCE_KEY) || '[]');
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayString();
   return records.find(r => r.userId === userId && r.date === today);
 };
 
@@ -139,7 +148,7 @@ export const getUserHistory = (userId: string): AttendanceRecord[] => {
 
 export const getAllTodayRecords = (): AttendanceRecord[] => {
   const records: AttendanceRecord[] = JSON.parse(localStorage.getItem(ATTENDANCE_KEY) || '[]');
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayString();
   return records.filter(r => r.date === today);
 };
 
@@ -182,7 +191,7 @@ export const sendToGAS = async (payload: any) => {
 export const markCheckIn = async (user: User, location: string, photo: string, distanceValue?: string): Promise<AttendanceRecord> => {
   await new Promise(resolve => setTimeout(resolve, 800));
   const todayDate = new Date();
-  const today = todayDate.toISOString().split('T')[0];
+  const today = getLocalTodayString();
   const time = todayDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
   
   // Calculate Late Logic (07:30)
@@ -267,7 +276,7 @@ export const submitReport = async (
   endDate?: string
 ): Promise<AttendanceRecord> => {
   await new Promise(resolve => setTimeout(resolve, 300));
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalTodayString();
   const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
   const existing = getTodayRecord(user.id);
@@ -365,7 +374,12 @@ export const fetchLivePeers = async (currentUserId?: string): Promise<Attendance
       if (csvDateStr === todayStr) return true;
       try {
           const d = new Date(csvDateStr);
-          if (!isNaN(d.getTime())) return d.toISOString().split('T')[0] === todayStr;
+          if (!isNaN(d.getTime())) {
+              // Get local string equivalent to check against todayStr
+              const tzDate = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Jakarta" }));
+              const formattedDate = `${tzDate.getFullYear()}-${String(tzDate.getMonth() + 1).padStart(2, '0')}-${String(tzDate.getDate()).padStart(2, '0')}`;
+              return formattedDate === todayStr;
+          }
       } catch {}
       if (csvDateStr.includes('/')) {
          const parts = csvDateStr.split('/');
