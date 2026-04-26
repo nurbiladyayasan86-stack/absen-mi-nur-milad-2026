@@ -394,60 +394,62 @@ export const fetchLivePeers = async (currentUserId?: string): Promise<Attendance
 
   // 2. Tarik data dari CSV
   try {
+    // We are trying to pull from a google sheet directly on client side. Usually this hits CORS. 
+    // Just in case, it works sometimes, and sometimes not. Let's not fail so loudly if it errors.
     const res = await fetch(LIVE_ABSENSI_CSV, { cache: 'no-store' });
-    if (!res.ok) throw new Error("Fetch Error");
+    if (!res.ok) throw new Error(`Fetch Error: ${res.status}`);
     
     const text = await res.text();
     // Cegah HTML form / Google Docs Error Redirect
     if (text.trim().toLowerCase().startsWith('<html') || text.trim().toLowerCase().startsWith('<!doc')) {
-        throw new Error("Received HTML Document instead of CSV. Link is restricted or throttling.");
-    }
+        console.warn("Received HTML Document instead of CSV from Google Sheets. Link is restricted or throttling.");
+    } else {
+        const rows = text.split('\n');
 
-    const rows = text.split('\n');
+        for (let i = 1; i < rows.length; i++) {
+           const cols = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+           if (cols.length >= 6) {
+              const cleanCol = (col?: string) => col ? col.replace(/(^"|"$)/g, '').trim() : '';
 
-    for (let i = 1; i < rows.length; i++) {
-       const cols = rows[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-       if (cols.length >= 6) {
-          const cleanCol = (col?: string) => col ? col.replace(/(^"|"$)/g, '').trim() : '';
+              const tanggal = cleanCol(cols[1]);
+              
+              if (isMatchToday(tanggal)) {
+                  const jam = cleanCol(cols[2]);      
+                  const tipe = cleanCol(cols[3]);     
+                  const nip = cleanCol(cols[4]);      
+                  const nama = cleanCol(cols[5]);     
 
-          const tanggal = cleanCol(cols[1]);
-          
-          if (isMatchToday(tanggal)) {
-              const jam = cleanCol(cols[2]);      
-              const tipe = cleanCol(cols[3]);     
-              const nip = cleanCol(cols[4]);      
-              const nama = cleanCol(cols[5]);     
+                  if (nama) {
+                      let exactType = 'present';
+                      if (tipe.toLowerCase() === 'sppd') exactType = 'sppd';
+                      if (tipe.toLowerCase() === 'sakit') exactType = 'sick';
+                      if (tipe.toLowerCase() === 'izin') exactType = 'leave';
 
-              if (nama) {
-                  let exactType = 'present';
-                  if (tipe.toLowerCase() === 'sppd') exactType = 'sppd';
-                  if (tipe.toLowerCase() === 'sakit') exactType = 'sick';
-                  if (tipe.toLowerCase() === 'izin') exactType = 'leave';
+                      if (!peersMap.has(nama)) {
+                         const linkedAvatar = userAvatarMap.get(nama.toLowerCase());
 
-                  if (!peersMap.has(nama)) {
-                     const linkedAvatar = userAvatarMap.get(nama.toLowerCase());
+                         peersMap.set(nama, {
+                            id: nip || nama,
+                            userId: nip || nama, 
+                            userName: nama,
+                            date: todayStr, // Pastikan format kembali standard
+                            avatar: linkedAvatar, 
+                            type: exactType as any
+                         } as AttendanceRecord);
+                      }
 
-                     peersMap.set(nama, {
-                        id: nip || nama,
-                        userId: nip || nama, 
-                        userName: nama,
-                        date: todayStr, // Pastikan format kembali standard
-                        avatar: linkedAvatar, 
-                        type: exactType as any
-                     } as AttendanceRecord);
+                      const record = peersMap.get(nama)!;
+                      if (exactType !== 'present') record.type = exactType as any;
+                      if (tipe === 'Masuk' || tipe === 'CHECK_IN') record.checkInTime = jam;
+                      else if (tipe === 'Pulang' || tipe === 'CHECK_OUT') record.checkOutTime = jam;
+                      if (!record.type) record.type = 'present';
                   }
-
-                  const record = peersMap.get(nama)!;
-                  if (exactType !== 'present') record.type = exactType as any;
-                  if (tipe === 'Masuk' || tipe === 'CHECK_IN') record.checkInTime = jam;
-                  else if (tipe === 'Pulang' || tipe === 'CHECK_OUT') record.checkOutTime = jam;
-                  if (!record.type) record.type = 'present';
               }
-          }
-       }
+           }
+        }
     }
   } catch (err) {
-    console.error("Gagal menarik live data API Google Sheets:", err);
+    console.warn("Gagal menarik live data API Google Sheets:", err);
     // Return NULL agar Caller bisa mendeteksi bahwa ini error jaringan, 
     // Jadi layar UI TIDAK dikosongkan (datanya tidak hilang saat re-render).
     return null;
